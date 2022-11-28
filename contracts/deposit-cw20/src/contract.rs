@@ -5,6 +5,7 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw20::Cw20ReceiveMsg;
+use cw20_base;
 // use cw2::set_contract_version;
 
 use crate::error::ContractError;
@@ -129,6 +130,9 @@ pub fn execute_cw20_deposit(deps: DepsMut, info: MessageInfo, owner:String, amou
     match CW20_DEPOSITS.load(deps.storage, (&owner, &cw20_contract_address)) {
         Ok(mut deposit) => {
             //add coins to their account
+
+            //TODO update time of stake when new coins are added.
+
             deposit.amount = deposit.amount.checked_add(amount).unwrap();
             deposit.count = deposit.count.checked_add(1).unwrap();
             CW20_DEPOSITS
@@ -164,6 +168,10 @@ pub fn execute_cw20_withdraw(
 ) -> Result<Response, ContractError> {
     let sender = info.sender.clone().into_string();
     match CW20_DEPOSITS.load(deps.storage, (&sender, &contract)) {
+
+        //TODO: make sure the stake duration has passed before allowing withdraw.
+        //if duration is not past yet return error.
+
         Ok(mut deposit) => {
             //add coins to their account
             deposit.amount = deposit.amount.checked_sub(amount).unwrap();

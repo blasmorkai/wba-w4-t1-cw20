@@ -1,7 +1,8 @@
+use cw20::Expiration;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Uint128, Addr, Coin};
+use cosmwasm_std::{Uint128, Addr, Coin, BlockInfo};
 use cw_storage_plus::Map;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -9,7 +10,8 @@ pub struct Cw20Deposits {
     pub count: i32,
     pub owner: String,
     pub contract:String,
-    pub amount:Uint128
+    pub amount:Uint128,
+    pub stake_time:Expiration
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
