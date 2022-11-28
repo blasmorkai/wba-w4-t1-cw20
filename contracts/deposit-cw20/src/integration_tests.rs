@@ -104,6 +104,7 @@ mod tests {
             .unwrap()
     }
 
+    // Gets the balance on the cw20 Contract, not this one.
     fn get_cw20_balance(app: &App, cw20_contract: &Cw20Contract, user:String) -> BalanceResponse {
         app.wrap()
             .query_wasm_smart(cw20_contract.addr(), &Cw20QueryMsg::Balance { address: user })
@@ -116,19 +117,20 @@ mod tests {
         let (mut app, deposit_id, cw20_id) = store_code();
         let deposit_contract = deposit_instantiate(&mut app, deposit_id);
 
+        // The Blockchain was setup with an initial balance of (denom, 1000) for USER.
         let balance = get_balance(&app, USER.to_string(), "denom".to_string());
-        println!("Intial Balance {:?}", balance);
+        println!("1. Initial Balance # {:?} # ", balance);
 
+        // User stores (denom, 1000) on deposit contract. The contract now owns the coins. User does not own any coins.
         let msg = ExecuteMsg::Deposit { };
-
         let cosmos_msg = deposit_contract.call(msg, vec![coin(1000, "denom")]).unwrap();
         app.execute(Addr::unchecked(USER), cosmos_msg).unwrap();
 
-        let balance = get_balance(&app, deposit_contract.addr().into_string(), deposit_contract.addr().into_string());
-        println!("Deposit Contract {:?}", balance);
-
         let balance = get_balance(&app, USER.to_string(), "denom".to_string());
-        println!("Post {:?}", balance);
+        println!("2. Balance after 1000 deposit on deposit_contract # {:?} # ", balance);
+
+        let balance = get_balance(&app, deposit_contract.addr().into_string(), "denom".into());
+        println!("3. Deposit Contract balance # {:?} # ", balance);
     }
 
     #[test]
@@ -137,30 +139,36 @@ mod tests {
         let deposit_contract = deposit_instantiate(&mut app, deposit_id);
         let cw20_contract = cw_20_instantiate(&mut app, cw20_id);
 
+        // On instantiation, User gets 10000 of the cw20 tokens on the cw_20 contract.
         let balance = get_cw20_balance(&app, &cw20_contract, USER.to_string());
-        println!("Intial Balance {:?}", balance);
+        println!("1. CW20 Contract- Initial Balance for USER # {:?}", balance);
 
+        // The user sends 500 of those tokens to the deposit contract.
         let hook_msg = Cw20HookMsg::Deposit { };
-
         let msg = Cw20ExecuteMsg::Send { contract: deposit_contract.addr().to_string(), amount: Uint128::from(500u64), msg: to_binary(&hook_msg).unwrap() };
         let cosmos_msg = cw20_contract.call(msg).unwrap();
         app.execute(Addr::unchecked(USER), cosmos_msg).unwrap();
 
+        // Now on the cw_20 contract the user has less money
+        let balance = get_cw20_balance(&app, &cw20_contract, USER.to_string());
+        println!("2. CW20 Balance after withdrawing 500 for USER # {:?}", balance);
+
+        // But on the deposit contract there is some money
         let deposits = get_cw20_deposits(&app, &deposit_contract);
-        println!("{:?}", deposits.deposits[0]);
+        println!("3. DEPOSIT contract, balance for USER {:?}", deposits.deposits[0]);
 
         let balance = get_cw20_balance(&app, &cw20_contract, deposit_contract.addr().into_string());
-        println!("Deposit Contract {:?}", balance);
+        println!("4. CW20 Balance for the deposit contract on the CW20 contract # {:?}", balance);
         assert_eq!(Uint128::from(500u64), balance.balance);
 
         let balance = get_cw20_balance(&app, &cw20_contract, USER.to_string());
-        println!("Post {:?}", balance);
+        println!("4. CW20 Balance for the USER on the CW20 contract {:?}", balance);
     }
 
-    #[test]
-    fn deposit_cw20_and_withdraw_after_expiration_has_passed() {
-        unimplemented!()
-    }
+    // #[test]
+    // fn LLLdeposit_cw20_and_withdraw_after_expiration_has_passed() {
+    //     unimplemented!()
+    // }
 
 
 

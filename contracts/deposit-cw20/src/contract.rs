@@ -3,8 +3,9 @@ use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     to_binary, from_binary, Binary, Deps, DepsMut, Env, MessageInfo, Order, Response, StdResult, Uint128, WasmMsg, BankMsg, coin
 };
+
 use cw2::set_contract_version;
-use cw20::Cw20ReceiveMsg;
+use cw20::{Cw20ReceiveMsg, Expiration};
 use cw20_base;
 // use cw2::set_contract_version;
 
@@ -29,15 +30,15 @@ pub fn instantiate(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::Deposit { } => execute_deposit(deps, info),
+        ExecuteMsg::Deposit { } => execute_deposit(deps, env,  info),
         ExecuteMsg::Withdraw { amount, denom } => execute_withdraw(deps, info, amount, denom),
-        ExecuteMsg::Receive(cw20_msg) => receive_cw20(deps, _env, info, cw20_msg),
-        ExecuteMsg::WithdrawCw20 { address, amount } => execute_cw20_withdraw(deps, info, address, amount),
+        ExecuteMsg::Receive(cw20_msg) => receive_cw20(deps, env, info, cw20_msg),
+        ExecuteMsg::WithdrawCw20 { address, amount } => execute_cw20_withdraw(deps, env, info, address, amount),
     }
 }
 
@@ -53,18 +54,19 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 
 pub fn receive_cw20(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     cw20_msg: Cw20ReceiveMsg,
 ) -> Result<Response, ContractError> {
     match from_binary(&cw20_msg.msg) {
-        Ok(Cw20HookMsg::Deposit { }) => execute_cw20_deposit(deps, info, cw20_msg.sender, cw20_msg.amount),
+        Ok(Cw20HookMsg::Deposit { }) => execute_cw20_deposit(deps, env, info, cw20_msg.sender, cw20_msg.amount),
         _ => Err(ContractError::CustomError { val: "Invalid Cw20HookMsg".to_string() }),
     }
 }
 
 pub fn execute_deposit(
     deps: DepsMut,
+    env: Env,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
     let sender = info.sender.clone().into_string();
@@ -75,7 +77,7 @@ pub fn execute_deposit(
     match DEPOSITS.load(deps.storage, (&sender, d_coins.denom.as_str())) {
         Ok(mut deposit) => {
             //add coins to their account
-            deposit.coins.amount += d_coins.amount;
+            // deposit.coins.amount += d_coins.amount;
             deposit.coins.amount = deposit.coins.amount.checked_add(d_coins.amount).unwrap();
             deposit.count = deposit.count.checked_add(1).unwrap();
             DEPOSITS.save(deps.storage, (&sender, d_coins.denom.as_str()), &deposit).unwrap();
@@ -124,9 +126,10 @@ pub fn execute_withdraw(
     )
 }
 
-pub fn execute_cw20_deposit(deps: DepsMut, info: MessageInfo, owner:String, amount:Uint128) -> Result<Response, ContractError> {
+pub fn execute_cw20_deposit(deps: DepsMut, env: Env, info: MessageInfo, owner:String, amount:Uint128) -> Result<Response, ContractError> {
     let cw20_contract_address = info.sender.clone().into_string();
     //check to see if u
+    let expired_at = Expiration::AtHeight(env.block.height + 20);
     match CW20_DEPOSITS.load(deps.storage, (&owner, &cw20_contract_address)) {
         Ok(mut deposit) => {
             //add coins to their account
@@ -135,6 +138,7 @@ pub fn execute_cw20_deposit(deps: DepsMut, info: MessageInfo, owner:String, amou
 
             deposit.amount = deposit.amount.checked_add(amount).unwrap();
             deposit.count = deposit.count.checked_add(1).unwrap();
+            deposit.stake_time = expired_at;
             CW20_DEPOSITS
                 .save(deps.storage, (&owner, &cw20_contract_address), &deposit)
                 .unwrap();
@@ -145,7 +149,8 @@ pub fn execute_cw20_deposit(deps: DepsMut, info: MessageInfo, owner:String, amou
                 count: 1,
                 owner: owner.clone(),
                 contract:info.sender.into_string(),
-                amount
+                amount,
+                stake_time: expired_at,
             };
             CW20_DEPOSITS
                 .save(deps.storage, (&owner, &cw20_contract_address), &deposit)
@@ -162,6 +167,7 @@ pub fn execute_cw20_deposit(deps: DepsMut, info: MessageInfo, owner:String, amou
 //use WasmMsg::Execute instead of BankMsg::Send
 pub fn execute_cw20_withdraw(
     deps: DepsMut,
+    env: Env,
     info: MessageInfo,
     contract:String,
     amount: Uint128,
@@ -174,6 +180,11 @@ pub fn execute_cw20_withdraw(
 
         Ok(mut deposit) => {
             //add coins to their account
+
+            if deposit.stake_time.is_expired(&env.block) != true {
+                return Err(ContractError::StakeDurationNotPassed {  });
+            }
+
             deposit.amount = deposit.amount.checked_sub(amount).unwrap();
             deposit.count = deposit.count.checked_sub(1).unwrap();
             CW20_DEPOSITS

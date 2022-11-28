@@ -9,6 +9,10 @@ pub enum ContractError {
     #[error("Custom Error val: {val:?}")]
     CustomError { val: String },
 
+    #[error("Stake duration has not passed")]
+    StakeDurationNotPassed{},
+
+
     #[error("Invalid Owner")]
     InvalidOwner {},
 
