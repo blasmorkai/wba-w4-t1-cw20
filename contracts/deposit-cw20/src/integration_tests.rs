@@ -2,7 +2,7 @@
 mod tests {
     use crate::helpers::DepositContract;
     use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg, Cw20HookMsg, Cw20DepositResponse, DepositResponse};
-    use cosmwasm_std::{Addr, Coin, Empty, Uint128, to_binary, BankQuery, BankMsg, coin};
+    use cosmwasm_std::{Addr, Coin, Empty, Uint128, to_binary, coin, WasmMsg};
     use cw20::{Cw20Contract, Cw20Coin, BalanceResponse};
     use cw20_base::msg::ExecuteMsg as Cw20ExecuteMsg;
     use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
@@ -119,7 +119,7 @@ mod tests {
 
         // The Blockchain was setup with an initial balance of (denom, 1000) for USER.
         let balance = get_balance(&app, USER.to_string(), "denom".to_string());
-        println!("1. Initial Balance # {:?} # ", balance);
+        println!("1. USER - Initial Balance # {:?} # ", balance);
 
         // User stores (denom, 1000) on deposit contract. The contract now owns the coins. User does not own any coins.
         let msg = ExecuteMsg::Deposit { };
@@ -127,10 +127,14 @@ mod tests {
         app.execute(Addr::unchecked(USER), cosmos_msg).unwrap();
 
         let balance = get_balance(&app, USER.to_string(), "denom".to_string());
-        println!("2. Balance after 1000 deposit on deposit_contract # {:?} # ", balance);
+        println!("2. USER - Balance after 1000 deposit on deposit_contract # {:?} # ", balance);
 
         let balance = get_balance(&app, deposit_contract.addr().into_string(), "denom".into());
-        println!("3. Deposit Contract balance # {:?} # ", balance);
+        println!("3. DEPOSIT CONTRACT - balance # {:?} # ", balance);
+
+        let balance = get_deposits(&app, &deposit_contract);
+        println!("4. USER BALANCE ON DEPOSIT CONTRACT - balance # {:?} # ", balance);
+
     }
 
     #[test]
@@ -149,20 +153,25 @@ mod tests {
         let cosmos_msg = cw20_contract.call(msg).unwrap();
         app.execute(Addr::unchecked(USER), cosmos_msg).unwrap();
 
-        // Now on the cw_20 contract the user has less money
+        // Now on the cw_20 contract the user has 9500
         let balance = get_cw20_balance(&app, &cw20_contract, USER.to_string());
-        println!("2. CW20 Balance after withdrawing 500 for USER # {:?}", balance);
+        println!("2. CW20 Contract - USER balance after withdrawing 500 to deposit_contract # {:?}", balance);
 
-        // But on the deposit contract there is some money
+        // But on the deposit contract there is some money. get_cw20_deposits querys on the deposit_contract the User Balance
         let deposits = get_cw20_deposits(&app, &deposit_contract);
-        println!("3. DEPOSIT contract, balance for USER {:?}", deposits.deposits[0]);
+        println!("3. DEPOSIT contract - User deposits {:?}", deposits.deposits[0]);
 
         let balance = get_cw20_balance(&app, &cw20_contract, deposit_contract.addr().into_string());
-        println!("4. CW20 Balance for the deposit contract on the CW20 contract # {:?}", balance);
+        println!("4. CW20 Contract - DEPOSIT CONTRACT balance # {:?}", balance);
         assert_eq!(Uint128::from(500u64), balance.balance);
 
         let balance = get_cw20_balance(&app, &cw20_contract, USER.to_string());
-        println!("4. CW20 Balance for the USER on the CW20 contract {:?}", balance);
+        println!("5. CW20 contract - User Balance {:?}", balance);
+
+        let balance = get_deposits(&app, &deposit_contract);
+        println!("6. DEPOSIT CONTRACT - USER balance # {:?} # ", balance);
+
+
     }
 
 
@@ -171,21 +180,46 @@ mod tests {
         let (mut app, deposit_id, cw20_id) = store_code();
         let deposit_contract = deposit_instantiate(&mut app, deposit_id);
         let cw20_contract = cw_20_instantiate(&mut app, cw20_id);
-        
+
+        let balance = get_cw20_balance(&app, &cw20_contract, USER.to_string());
+        println!("1. CW20 Contract- Initial Balance for USER # {:?}", balance);
+
+        // 500 cw20 tokens are sent to the deposit contract. 
+        // The CW20 contract registers that the deposit contract has the 500 tokens
         let hook_msg = Cw20HookMsg::Deposit { };
         let msg = Cw20ExecuteMsg::Send { contract: deposit_contract.addr().to_string(), amount: Uint128::from(500u64), msg: to_binary(&hook_msg).unwrap() };
         let cosmos_msg = cw20_contract.call(msg).unwrap();
         app.execute(Addr::unchecked(USER), cosmos_msg).unwrap();
+        println!("SEND 500 FROM CW20 CONTRACT TO DEPOSIT CONTRACT FOR USER");
         
-        app.block_info().height = app.block_info().height.checked_add(21).unwrap();
+        let balance = get_cw20_balance(&app, &cw20_contract, USER.to_string());
+        println!("2. CW20 Contract- USER  balance after 500 transfer to DEPOSIT CONTRACT# {:?}", balance);
 
-        let msg = ExecuteMsg::WithdrawCw20 {address: USER.to_string(), amount:Uint128::from(500u128)};
-        let execute_msg = WasmMsg::Execute { contract_addr: deposit_contract.addr().to_string(), msg: to_binary(&msg).unwrap()};
-        app.execute(sender: Addr::unchecked(USER), execute_msg.into());
+        let balance = get_cw20_balance(&app, &cw20_contract, deposit_contract.addr().into_string());
+        println!("3. CW20 Contract - DEPOSIT CONTRACT balance # {:?}", balance);
 
+        let deposits = get_cw20_deposits(&app, &deposit_contract);
+        println!("4. DEPOSIT contract - USER deposits {:?}", deposits.deposits[0]);
+
+        let mut block = app.block_info(); 
+        block.height = app.block_info().height.checked_add(20).unwrap();
+        app.set_block(block);
+
+        let msg = ExecuteMsg::WithdrawCw20 {address:cw20_contract.addr().to_string(), amount:Uint128::from(500u64)};
+        let execute_msg = WasmMsg::Execute { contract_addr: deposit_contract.addr().to_string(), msg: to_binary(&msg).unwrap(), funds: vec![] };
+        app.execute(Addr::unchecked(USER), execute_msg.into()).unwrap();
+
+        println!("WITHDRAW 500 from DEPOSIT CONTRACT - KEEP THEN IN CW20 CONTRACT FOR USER");
+
+        let balance = get_cw20_balance(&app, &cw20_contract, USER.to_string());
+        println!("5. CW20 Contract- USER  balance # {:?}", balance);
+
+        let balance = get_cw20_balance(&app, &cw20_contract, deposit_contract.addr().into_string());
+        println!("6. CW20 Contract - DEPOSIT CONTRACT balance # {:?}", balance);
+
+        let deposits = get_cw20_deposits(&app, &deposit_contract);
+        println!("7. DEPOSIT contract - USER deposits {:?}", deposits.deposits[0]);       
 
     }
-
-
-
+   
 }
