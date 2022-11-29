@@ -165,11 +165,26 @@ mod tests {
         println!("4. CW20 Balance for the USER on the CW20 contract {:?}", balance);
     }
 
-    // #[test]
-    // fn LLLdeposit_cw20_and_withdraw_after_expiration_has_passed() {
-    //     unimplemented!()
-    // }
 
+    #[test]
+    fn deposit_cw20_and_withdraw_after_expiration_has_passed() {
+        let (mut app, deposit_id, cw20_id) = store_code();
+        let deposit_contract = deposit_instantiate(&mut app, deposit_id);
+        let cw20_contract = cw_20_instantiate(&mut app, cw20_id);
+        
+        let hook_msg = Cw20HookMsg::Deposit { };
+        let msg = Cw20ExecuteMsg::Send { contract: deposit_contract.addr().to_string(), amount: Uint128::from(500u64), msg: to_binary(&hook_msg).unwrap() };
+        let cosmos_msg = cw20_contract.call(msg).unwrap();
+        app.execute(Addr::unchecked(USER), cosmos_msg).unwrap();
+        
+        app.block_info().height = app.block_info().height.checked_add(21).unwrap();
+
+        let msg = ExecuteMsg::WithdrawCw20 {address: USER.to_string(), amount:Uint128::from(500u128)};
+        let execute_msg = WasmMsg::Execute { contract_addr: deposit_contract.addr().to_string(), msg: to_binary(&msg).unwrap()};
+        app.execute(sender: Addr::unchecked(USER), execute_msg.into());
+
+
+    }
 
 
 
