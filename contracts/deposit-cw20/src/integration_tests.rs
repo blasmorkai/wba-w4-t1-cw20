@@ -169,7 +169,10 @@ mod tests {
         println!("5. CW20 contract - User Balance {:?}", balance);
 
         let balance = get_deposits(&app, &deposit_contract);
-        println!("6. DEPOSIT CONTRACT - USER balance # {:?} # ", balance);
+        println!("6. DEPOSIT CONTRACT - USER deposits # {:?} # ", balance);
+
+        let deposits = get_cw20_deposits(&app, &deposit_contract);
+        println!("7. DEPOSIT contract - USER cw20 deposits {:?}", deposits.deposits[0]);
 
 
     }
@@ -193,13 +196,13 @@ mod tests {
         println!("SEND 500 FROM CW20 CONTRACT TO DEPOSIT CONTRACT FOR USER");
         
         let balance = get_cw20_balance(&app, &cw20_contract, USER.to_string());
-        println!("2. CW20 Contract- USER  balance after 500 transfer to DEPOSIT CONTRACT# {:?}", balance);
+        println!("2. CW20 Contract- USER cw20 balance after 500 transfer to DEPOSIT CONTRACT# {:?}", balance);
 
         let balance = get_cw20_balance(&app, &cw20_contract, deposit_contract.addr().into_string());
-        println!("3. CW20 Contract - DEPOSIT CONTRACT balance # {:?}", balance);
+        println!("3. CW20 Contract - DEPOSIT CONTRACT cw20 balance # {:?}", balance);
 
         let deposits = get_cw20_deposits(&app, &deposit_contract);
-        println!("4. DEPOSIT contract - USER deposits {:?}", deposits.deposits[0]);
+        println!("4. DEPOSIT contract - USER cw20 deposits {:?}", deposits.deposits[0]);
 
         let mut block = app.block_info(); 
         block.height = app.block_info().height.checked_add(20).unwrap();
